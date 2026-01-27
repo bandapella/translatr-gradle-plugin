@@ -25,7 +25,8 @@ data class TranslatrCache(
     @Json(name = "source_hash") val sourceHash: String,
     @Json(name = "timestamp") val timestamp: Long,
     @Json(name = "languages") val languages: Set<String>,
-    @Json(name = "string_hashes") val stringHashes: Map<String, String> = emptyMap()
+    @Json(name = "string_hashes") val stringHashes: Map<String, String> = emptyMap(),
+    @Json(name = "failed") val failed: Boolean = false
 )
 
 abstract class TranslatrTask : DefaultTask() {
@@ -56,6 +57,20 @@ abstract class TranslatrTask : DefaultTask() {
     
     @get:Internal
     abstract val buildDirectory: DirectoryProperty
+    
+    // Cache state as input to invalidate Gradle's UP-TO-DATE check when translation fails
+    @Input
+    fun getCacheState(): String {
+        val cacheFile = getCacheFile()
+        if (!cacheFile.exists()) return "no-cache"
+        
+        val cache = readCache(cacheFile)
+        return when {
+            cache == null -> "no-cache"
+            cache.failed -> "failed-${cache.timestamp}"
+            else -> "success-${cache.sourceHash}"
+        }
+    }
     
     private fun createCacheAdapter(): JsonAdapter<TranslatrCache> {
         val moshi = Moshi.Builder()
@@ -215,7 +230,7 @@ abstract class TranslatrTask : DefaultTask() {
                     }
                     if (allOutputsExist) {
                         // Update cache with current languages
-                        writeCache(cacheFile, TranslatrCache(currentHash, System.currentTimeMillis(), serverLanguages, currentStringHashes))
+                        writeCache(cacheFile, TranslatrCache(currentHash, System.currentTimeMillis(), serverLanguages, currentStringHashes, failed = false))
                         logger.lifecycle("Translatr: All outputs up-to-date (UP-TO-DATE)")
                         return
                     }
@@ -312,11 +327,15 @@ abstract class TranslatrTask : DefaultTask() {
                     } else {
                         logger.warn("Translatr: No cached translations available")
                         logger.warn("Translatr: Continuing build despite translation failure (failOnError=false)")
+                        // Write failed cache to prevent Gradle UP-TO-DATE on next run
+                        writeCache(cacheFile, TranslatrCache(currentHash, System.currentTimeMillis(), emptySet(), currentStringHashes, failed = true))
                         return
                     }
                 } catch (cacheError: Exception) {
                     logger.error("Translatr: Failed to fetch cached translations: ${cacheError.message}")
                     logger.warn("Translatr: Continuing build despite translation failure (failOnError=false)")
+                    // Write failed cache to prevent Gradle UP-TO-DATE on next run
+                    writeCache(cacheFile, TranslatrCache(currentHash, System.currentTimeMillis(), emptySet(), currentStringHashes, failed = true))
                     return
                 }
             }
@@ -382,9 +401,11 @@ abstract class TranslatrTask : DefaultTask() {
         // If we fell back to cached translations due to failure, don't update cache
         // to ensure new strings are retried on next run
         if (!translationFailed) {
-            writeCache(cacheFile, TranslatrCache(currentHash, System.currentTimeMillis(), languages, currentStringHashes))
+            writeCache(cacheFile, TranslatrCache(currentHash, System.currentTimeMillis(), languages, currentStringHashes, failed = false))
         } else {
-            logger.lifecycle("Translatr: Cache not updated due to translation failure - new strings will be retried on next run")
+            // Mark cache as failed so Gradle knows to re-run even if inputs haven't changed
+            writeCache(cacheFile, TranslatrCache(currentHash, System.currentTimeMillis(), languages, currentStringHashes, failed = true))
+            logger.lifecycle("Translatr: Cache marked as failed - task will retry on next run")
         }
         
         logger.lifecycle("Translatr: Translation complete!")

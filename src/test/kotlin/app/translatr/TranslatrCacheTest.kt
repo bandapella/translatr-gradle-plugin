@@ -27,7 +27,8 @@ class TranslatrCacheTest {
             stringHashes = mapOf(
                 "hello" to "hash1",
                 "world" to "hash2"
-            )
+            ),
+            failed = false
         )
         
         val cacheFile = File(tempDir, "cache.json")
@@ -44,6 +45,7 @@ class TranslatrCacheTest {
         assertEquals(cache.sourceHash, loaded.sourceHash)
         assertEquals(cache.languages, loaded.languages)
         assertEquals(cache.stringHashes, loaded.stringHashes)
+        assertEquals(cache.failed, loaded.failed)
     }
     
     @Test
