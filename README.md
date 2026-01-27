@@ -226,4 +226,4 @@ Publish to Maven Local:
 
 ## License
 
-MIT
+Proprietary - See LICENSE file for details
