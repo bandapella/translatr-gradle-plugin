@@ -84,12 +84,12 @@ class TranslatrApiException(
 class TranslatrClient(
     private val serverUrl: String,
     private val apiKey: String,
-    private val timeoutSeconds: Int = 30,
+    private val timeoutSeconds: Int = 60,
     private val maxRetries: Int = 3
 ) {
     private val client = OkHttpClient.Builder()
         .connectTimeout(timeoutSeconds.toLong(), TimeUnit.SECONDS)
-        .readTimeout(6L, TimeUnit.MINUTES) // Increased for polling
+        .readTimeout(timeoutSeconds.toLong(), TimeUnit.SECONDS)
         .writeTimeout(timeoutSeconds.toLong(), TimeUnit.SECONDS)
         .build()
     
@@ -201,7 +201,7 @@ class TranslatrClient(
         val jobId = createJob(backendStrings)
         
         // Poll for completion
-        val result = pollJob(jobId, maxWaitSeconds = 180, onProgress = onProgress)
+        val result = pollJob(jobId, maxWaitSeconds = 600, onProgress = onProgress)
         
         return TranslateResponse(
             translations = result.translations ?: emptyMap(),
@@ -252,7 +252,7 @@ class TranslatrClient(
     
     private fun pollJob(
         jobId: String,
-        maxWaitSeconds: Int,
+        maxWaitSeconds: Int = 600,
         onProgress: ((processedCount: Int, totalCount: Int, cachedCount: Int, translatedCount: Int) -> Unit)? = null
     ): JobStatusResponse {
         var lastActivityTime = System.currentTimeMillis()

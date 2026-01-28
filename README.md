@@ -59,7 +59,7 @@ translatr {
     outputDir.set(layout.projectDirectory.dir("composeApp/src/commonMain/composeResources"))
     
     // Optional retry and timeout settings
-    timeoutSeconds = 30  // Default: 30 seconds
+    timeoutSeconds = 60  // Default: 60 seconds (HTTP request timeout)
     maxRetries = 3       // Default: 3 attempts
     failOnError = false  // Default: false (won't fail build on API errors)
 }
@@ -108,7 +108,7 @@ Then use:
 | `triggerMode` | TriggerMode | `MANUAL` | When to run translations (MANUAL or AUTO) |
 | `sourceFile` | String | Platform-specific* | Path to source strings.xml file |
 | `outputDir` | String | Platform-specific* | Directory for translated output files |
-| `timeoutSeconds` | Int | `30` | Connection timeout in seconds |
+| `timeoutSeconds` | Int | `60` | HTTP request timeout in seconds (connect, read, write operations) |
 | `maxRetries` | Int | `3` | Maximum retry attempts on network failures |
 | `failOnError` | Boolean | `false` | Whether to fail the build on API errors |
 
@@ -120,10 +120,14 @@ Then use:
 
 By default, the plugin will **not fail your build** if it cannot connect to the API. This ensures your builds continue even if the translation service is temporarily unavailable.
 
+The plugin has two types of timeouts:
+- **HTTP Request Timeout** (`timeoutSeconds`): Maximum time for individual HTTP requests (connect, read, write). Default: 60 seconds
+- **Client Polling Timeout**: Maximum time the client waits for job progress updates before giving up. Default: 10 minutes (client-side only, not configurable)
+
 ```kotlin
 translatr {
-    // Increase timeout for slower connections
-    timeoutSeconds = 60
+    // Increase timeout for slower connections or large translation jobs
+    timeoutSeconds = 90  // HTTP request timeout
     
     // Retry more aggressively
     maxRetries = 5

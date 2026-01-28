@@ -50,7 +50,8 @@ abstract class TranslatrExtension @Inject constructor(
     abstract val outputDir: DirectoryProperty
     
     /**
-     * Connection timeout in seconds (default: 30)
+     * HTTP request timeout in seconds for all HTTP operations (connect, read, write)
+     * Default: 60 seconds
      */
     abstract val timeoutSeconds: Property<Int>
     
@@ -72,7 +73,7 @@ abstract class TranslatrExtension @Inject constructor(
     init {
         serverUrl.convention("https://translatr.app/api")
         triggerMode.convention(TriggerMode.MANUAL)
-        timeoutSeconds.convention(30)
+        timeoutSeconds.convention(60)
         maxRetries.convention(3)
         failOnError.convention(false)
         dryRun.convention(false)
