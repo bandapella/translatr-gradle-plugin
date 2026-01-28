@@ -150,19 +150,24 @@ abstract class TranslatrTask : DefaultTask() {
         
         // Read cache to detect what changed
         val cache = readCache(cacheFile)
-        val previousStringHashes = cache?.stringHashes ?: emptyMap()
+        val previousStringHashes = if (cache?.failed == true) emptyMap() else cache?.stringHashes ?: emptyMap()
         
         // Determine which strings need translation
         val stringsToTranslate = mutableMapOf<String, Map<String, String>>()
         val newKeys = mutableListOf<String>()
         val modifiedKeys = mutableListOf<String>()
-        val removedKeys = previousStringHashes.keys - currentStringHashes.keys
+        val removedKeys = if (cache?.failed == true) emptySet() else previousStringHashes.keys - currentStringHashes.keys
         
         for ((key, value) in strings) {
             val currentHashValue = currentStringHashes[key]!!
             val previousHash = previousStringHashes[key]
             
             when {
+                cache?.failed == true -> {
+                    // If last run failed, treat everything as needing translation
+                    // to ensure we retry everything. The server will handle actual caching.
+                    stringsToTranslate[key] = mapOf("value" to value, "hash" to currentHashValue)
+                }
                 previousHash == null -> {
                     // New string
                     newKeys.add(key)
@@ -206,7 +211,7 @@ abstract class TranslatrTask : DefaultTask() {
         }
         
         // If nothing changed and outputs exist, we're done
-        if (stringsToTranslate.isEmpty() && removedKeys.isEmpty()) {
+        if (stringsToTranslate.isEmpty() && removedKeys.isEmpty() && cache?.failed != true) {
             logger.lifecycle("Translatr: No changes detected, checking output files...")
             
             // Fetch current languages from server to detect new languages

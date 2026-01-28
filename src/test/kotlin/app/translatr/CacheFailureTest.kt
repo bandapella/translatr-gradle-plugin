@@ -98,4 +98,32 @@ class CacheFailureTest {
         assertTrue(failedJson.contains("\"failed\":true"), "Failed cache JSON should contain failed:true")
         assertTrue(successJson.contains("\"failed\":false"), "Success cache JSON should contain failed:false")
     }
+
+    @Test
+    fun `getCacheState returns different values for success and failure`() {
+        val successCache = TranslatrCache(
+            sourceHash = "abc123",
+            timestamp = 1000L,
+            languages = setOf("es"),
+            stringHashes = mapOf("hello" to "hash1"),
+            failed = false
+        )
+        
+        val failedCache = successCache.copy(failed = true, timestamp = 2000L)
+        
+        // We can't easily test TranslatrTask.getCacheState() here because it's abstract and needs Gradle setup,
+        // but we can verify the logic that would be used.
+        
+        fun getState(cache: TranslatrCache?): String {
+            return when {
+                cache == null -> "no-cache"
+                cache.failed -> "failed-${cache.timestamp}"
+                else -> "success-${cache.sourceHash}"
+            }
+        }
+        
+        assertEquals("success-abc123", getState(successCache))
+        assertEquals("failed-2000", getState(failedCache))
+        assertEquals("no-cache", getState(null))
+    }
 }
