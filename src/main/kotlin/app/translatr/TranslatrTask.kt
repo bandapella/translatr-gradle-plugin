@@ -262,9 +262,19 @@ abstract class TranslatrTask : DefaultTask() {
         
         if (stringsToTranslate.isNotEmpty()) {
             logger.lifecycle("Translatr: Requesting translations for ${stringsToTranslate.size} string(s)...")
+            logger.lifecycle("Translatr: Large translations may take 5+ minutes. Progress will be shown below.")
             
             try {
-                val response = client.translate(stringsToTranslate)
+                val response = client.translate(stringsToTranslate) { processedCount, totalCount, cachedCount, translatedCount ->
+                    if (cachedCount > 0 && translatedCount == 0 && processedCount == cachedCount) {
+                        logger.lifecycle("Translatr: $cachedCount/$totalCount strings served from cache immediately")
+                        logger.lifecycle("Translatr: Translating remaining ${totalCount - cachedCount} strings...")
+                    } else if (cachedCount > 0) {
+                        logger.lifecycle("Translatr: Processing... $processedCount/$totalCount strings ($cachedCount cached, $translatedCount translated)")
+                    } else {
+                        logger.lifecycle("Translatr: Processing... $processedCount/$totalCount strings")
+                    }
+                }
                 val newTranslations = response.translations
                 
                 if (newTranslations.isEmpty()) {

@@ -34,6 +34,7 @@ data class JobStatusResponse(
     val id: String,
     val status: String,
     val progress: Int,
+    @Json(name = "strings_count") val stringsCount: Int? = null,
     @Json(name = "created_at") val createdAt: String,
     @Json(name = "updated_at") val updatedAt: String,
     @Json(name = "completed_at") val completedAt: String? = null,
@@ -88,7 +89,7 @@ class TranslatrClient(
 ) {
     private val client = OkHttpClient.Builder()
         .connectTimeout(timeoutSeconds.toLong(), TimeUnit.SECONDS)
-        .readTimeout(180L, TimeUnit.SECONDS) // Increased for polling
+        .readTimeout(6L, TimeUnit.MINUTES) // Increased for polling
         .writeTimeout(timeoutSeconds.toLong(), TimeUnit.SECONDS)
         .build()
     
@@ -177,7 +178,10 @@ class TranslatrClient(
         return TranslatrApiException(userMessage, debugMessage)
     }
     
-    fun translate(strings: Map<String, Map<String, String>>): TranslateResponse {
+    fun translate(
+        strings: Map<String, Map<String, String>>,
+        onProgress: ((processedCount: Int, totalCount: Int, cachedCount: Int, translatedCount: Int) -> Unit)? = null
+    ): TranslateResponse {
         // Convert format: Map<String, Map<String, String>> where inner map has "value" and "hash"
         // to backend format: Map<String, Any> (String or StringWithHash)
         val backendStrings = strings.mapValues { (_, valueMap) ->
@@ -197,7 +201,7 @@ class TranslatrClient(
         val jobId = createJob(backendStrings)
         
         // Poll for completion
-        val result = pollJob(jobId, maxWaitSeconds = 180)
+        val result = pollJob(jobId, maxWaitSeconds = 180, onProgress = onProgress)
         
         return TranslateResponse(
             translations = result.translations ?: emptyMap(),
@@ -246,23 +250,49 @@ class TranslatrClient(
         throw lastException ?: IOException("Failed to create translation job")
     }
     
-    private fun pollJob(jobId: String, maxWaitSeconds: Int): JobStatusResponse {
-        val startTime = System.currentTimeMillis()
+    private fun pollJob(
+        jobId: String,
+        maxWaitSeconds: Int,
+        onProgress: ((processedCount: Int, totalCount: Int, cachedCount: Int, translatedCount: Int) -> Unit)? = null
+    ): JobStatusResponse {
+        var lastActivityTime = System.currentTimeMillis()
+        var lastUpdatedAt: String? = null
+        var lastReportedProcessed = -1
+        var lastReportedTotal = -1
         var delayMs = 1000L // Start with 1 second
         val maxDelayMs = 10000L // Cap at 10 seconds
         
         while (true) {
-            // Check timeout
-            val elapsedSeconds = (System.currentTimeMillis() - startTime) / 1000
-            if (elapsedSeconds > maxWaitSeconds) {
+            // Timeout based on time since updated_at changed, not start time
+            val timeSinceActivity = (System.currentTimeMillis() - lastActivityTime) / 1000
+            if (timeSinceActivity > maxWaitSeconds) {
                 throw TranslatrApiException(
-                    "Translation job timed out after ${maxWaitSeconds}s",
+                    "Translation job timed out (no progress for ${maxWaitSeconds}s)",
                     "Job ID: $jobId"
                 )
             }
             
             // Poll job status
             val status = getJobStatus(jobId)
+            
+            // Reset timeout if updated_at changed (job is still making progress)
+            if (status.updatedAt != lastUpdatedAt) {
+                lastUpdatedAt = status.updatedAt
+                lastActivityTime = System.currentTimeMillis()
+            }
+            
+            // Report progress only if changed
+            status.stringsCount?.let { total ->
+                val processedCount = (total * status.progress) / 100
+                val cachedCount = status.meta?.cached ?: 0
+                val translatedCount = status.meta?.translated ?: 0
+                
+                if (processedCount != lastReportedProcessed || total != lastReportedTotal) {
+                    onProgress?.invoke(processedCount, total, cachedCount, translatedCount)
+                    lastReportedProcessed = processedCount
+                    lastReportedTotal = total
+                }
+            }
             
             when (status.status) {
                 "completed" -> {
