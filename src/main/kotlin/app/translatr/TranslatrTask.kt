@@ -311,6 +311,13 @@ abstract class TranslatrTask : DefaultTask() {
                     }
                 }
                 
+                // Log token usage if available
+                val tokensUsed = response.tokensUsed ?: 0
+                if (tokensUsed > 0) {
+                    val tokensRemaining = response.tokensRemaining ?: 0
+                    logger.lifecycle("Translatr: Used $tokensUsed tokens, $tokensRemaining tokens remaining")
+                }
+                
                 // Merge new and cached translations
                 allTranslations = cachedResponse.translations + newTranslations
                 

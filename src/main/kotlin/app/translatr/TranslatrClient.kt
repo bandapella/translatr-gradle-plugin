@@ -40,7 +40,9 @@ data class JobStatusResponse(
     @Json(name = "completed_at") val completedAt: String? = null,
     val translations: Map<String, Map<String, String>>? = null,
     @Json(name = "error_message") val errorMessage: String? = null,
-    val meta: TranslateResponseMeta? = null
+    val meta: TranslateResponseMeta? = null,
+    @Json(name = "tokens_used") val tokensUsed: Int? = null,
+    @Json(name = "tokens_remaining") val tokensRemaining: Int? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -53,7 +55,9 @@ data class TranslateResponseMeta(
 @JsonClass(generateAdapter = true)
 data class TranslateResponse(
     val translations: Map<String, Map<String, String>>,
-    val meta: TranslateResponseMeta? = null
+    val meta: TranslateResponseMeta? = null,
+    @Json(name = "tokens_used") val tokensUsed: Int? = null,
+    @Json(name = "tokens_remaining") val tokensRemaining: Int? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -205,7 +209,9 @@ class TranslatrClient(
         
         return TranslateResponse(
             translations = result.translations ?: emptyMap(),
-            meta = result.meta
+            meta = result.meta,
+            tokensUsed = result.tokensUsed,
+            tokensRemaining = result.tokensRemaining
         )
     }
     
