@@ -115,6 +115,17 @@ abstract class TranslatrTask : DefaultTask() {
     
     @TaskAction
     fun translate() {
+        // Check for version updates (non-blocking)
+        try {
+            val checker = VersionChecker(serverUrl.get())
+            val updateMessage = checker.checkForUpdates()
+            if (updateMessage != null) {
+                logger.lifecycle(updateMessage)
+            }
+        } catch (e: Exception) {
+            // Silently ignore version check failures
+        }
+        
         // Validate inputs
         val apiKeyValue = apiKey.orNull
             ?: throw IllegalStateException("translatr.apiKey is required")
