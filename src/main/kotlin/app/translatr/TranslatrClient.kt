@@ -295,7 +295,7 @@ class TranslatrClient(
             }
             
             when (status.status) {
-                "completed" -> {
+                "completed", "partial" -> {
                     if (status.translations == null) {
                         throw IOException("Job completed but translations are missing")
                     }
