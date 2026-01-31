@@ -305,8 +305,8 @@ abstract class TranslatrTask : DefaultTask() {
                     .toSet()
                 
                 if (languages.isEmpty()) {
-                    logger.warn("No target languages configured")
-                    logger.warn("Please configure languages in the UI at ${serverUrlValue.replace("/api", "")}")
+                    logger.error("Translation failed: No translations were returned from the server")
+                    logger.error("This may indicate an issue with your account or the translation service")
                     return
                 }
                 
