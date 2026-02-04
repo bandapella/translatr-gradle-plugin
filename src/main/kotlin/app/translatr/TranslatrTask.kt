@@ -270,6 +270,9 @@ abstract class TranslatrTask : DefaultTask() {
         var allTranslations: Map<String, Map<String, String>>
         var languages: Set<String>
         var translationFailed = false  // Track if we're using fallback due to failure
+        var finalWarning: String? = null
+        var finalTokensUsed: Int? = null
+        var finalTokensRemaining: Int? = null
         
         if (stringsToTranslate.isNotEmpty()) {
             logger.lifecycle("Translatr: Requesting translations for ${stringsToTranslate.size} string(s)...")
@@ -288,16 +291,16 @@ abstract class TranslatrTask : DefaultTask() {
                 }
                 val newTranslations = response.translations
                 
-                // Display warning for partial completion (show this early so user sees it)
-                response.warning?.let { warning ->
-                    logger.warn("⚠️  Translatr: $warning")
+                // Capture warning/token usage for end-of-run summary (so it doesn't scroll off)
+                finalWarning = response.warning
+                if (finalWarning != null) {
+                    // Partial completion - ensure we retry next run once tokens are replenished
+                    translationFailed = true
                 }
-                
-                // Log token usage if available
                 val tokensUsed = response.tokensUsed ?: 0
                 if (tokensUsed > 0) {
-                    val tokensRemaining = response.tokensRemaining ?: 0
-                    logger.lifecycle("Translatr: Used $tokensUsed tokens, $tokensRemaining tokens remaining")
+                    finalTokensUsed = tokensUsed
+                    finalTokensRemaining = response.tokensRemaining ?: 0
                 }
                 
                 // Get cached translations for unchanged strings
@@ -308,8 +311,9 @@ abstract class TranslatrTask : DefaultTask() {
                 // fall back to using only cached translations
                 if (newTranslations.isEmpty()) {
                     if (response.warning != null && cachedResponse.translations.isNotEmpty()) {
-                        logger.warn("Translatr: No new translations completed due to insufficient credits")
                         logger.lifecycle("Translatr: Using cached translations as fallback")
+                        // Mark cache as failed so we retry once tokens are replenished
+                        translationFailed = true
                         allTranslations = cachedResponse.translations
                         languages = cachedResponse.translations.values
                             .flatMap { it.keys }
@@ -457,6 +461,20 @@ abstract class TranslatrTask : DefaultTask() {
             logger.lifecycle("Translatr: Cache marked as failed - task will retry on next run")
         }
         
-        logger.lifecycle("Translatr: Translation complete!")
+        // End-of-run summary (print after file output so it's not obscured)
+        if (finalWarning != null) {
+            logger.lifecycle("Translatr: Translation partially completed — see warning below.")
+        } else {
+            logger.lifecycle("Translatr: Translation complete!")
+        }
+        finalTokensUsed
+            ?.takeIf { it > 0 }
+            ?.let { tokensUsed ->
+                val tokensRemaining = finalTokensRemaining ?: 0
+                logger.lifecycle("Translatr: Used $tokensUsed tokens, $tokensRemaining tokens remaining")
+            }
+        finalWarning?.let { warning ->
+            logger.warn("⚠️  Translatr: $warning")
+        }
     }
 }
