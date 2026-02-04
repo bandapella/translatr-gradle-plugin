@@ -288,38 +288,9 @@ abstract class TranslatrTask : DefaultTask() {
                 }
                 val newTranslations = response.translations
                 
-                if (newTranslations.isEmpty()) {
-                    logger.warn("No translations returned")
-                    logger.warn("Please configure target languages in the UI at ${serverUrlValue.replace("/api", "")}")
-                    return
-                }
-                
-                // Get cached translations for unchanged strings
-                logger.lifecycle("Translatr: Fetching cached translations for unchanged strings...")
-                val cachedResponse = client.getCachedTranslations()
-                
-                // Extract target languages from both new and cached translations
-                // to preserve all configured languages even if translate response is partial
-                languages = (newTranslations.values + cachedResponse.translations.values)
-                    .flatMap { it.keys }
-                    .toSet()
-                
-                if (languages.isEmpty()) {
-                    logger.error("Translation failed: No translations were returned from the server")
-                    logger.error("This may indicate an issue with your account or the translation service")
-                    return
-                }
-                
-                logger.lifecycle("Translatr: Received translations for languages: ${languages.joinToString(", ")}")
-                
-                // Log cache statistics if available
-                response.meta?.let { meta ->
-                    val actuallyTranslated = meta.translated ?: 0
-                    if (actuallyTranslated > 0) {
-                        logger.lifecycle("Translatr: Translated ${actuallyTranslated} string(s) (${meta.cached ?: 0} from cache)")
-                    } else {
-                        logger.lifecycle("Translatr: All ${meta.cached ?: 0} string(s) retrieved from cache (no AI translation needed)")
-                    }
+                // Display warning for partial completion (show this early so user sees it)
+                response.warning?.let { warning ->
+                    logger.warn("⚠️  Translatr: $warning")
                 }
                 
                 // Log token usage if available
@@ -329,13 +300,53 @@ abstract class TranslatrTask : DefaultTask() {
                     logger.lifecycle("Translatr: Used $tokensUsed tokens, $tokensRemaining tokens remaining")
                 }
                 
-                // Display warning for partial completion
-                response.warning?.let { warning ->
-                    logger.warn("⚠️  Translatr: $warning")
-                }
+                // Get cached translations for unchanged strings
+                logger.lifecycle("Translatr: Fetching cached translations for unchanged strings...")
+                val cachedResponse = client.getCachedTranslations()
                 
-                // Merge new and cached translations
-                allTranslations = cachedResponse.translations + newTranslations
+                // If new translations are empty but there's a warning (partial completion),
+                // fall back to using only cached translations
+                if (newTranslations.isEmpty()) {
+                    if (response.warning != null && cachedResponse.translations.isNotEmpty()) {
+                        logger.warn("Translatr: No new translations completed due to insufficient credits")
+                        logger.lifecycle("Translatr: Using cached translations as fallback")
+                        allTranslations = cachedResponse.translations
+                        languages = cachedResponse.translations.values
+                            .flatMap { it.keys }
+                            .toSet()
+                    } else {
+                        logger.warn("No translations returned")
+                        logger.warn("Please configure target languages in the UI at ${serverUrlValue.replace("/api", "")}")
+                        return
+                    }
+                } else {
+                    // Extract target languages from both new and cached translations
+                    // to preserve all configured languages even if translate response is partial
+                    languages = (newTranslations.values + cachedResponse.translations.values)
+                        .flatMap { it.keys }
+                        .toSet()
+                    
+                    if (languages.isEmpty()) {
+                        logger.error("Translation failed: No translations were returned from the server")
+                        logger.error("This may indicate an issue with your account or the translation service")
+                        return
+                    }
+                    
+                    logger.lifecycle("Translatr: Received translations for languages: ${languages.joinToString(", ")}")
+                    
+                    // Log cache statistics if available
+                    response.meta?.let { meta ->
+                        val actuallyTranslated = meta.translated ?: 0
+                        if (actuallyTranslated > 0) {
+                            logger.lifecycle("Translatr: Translated ${actuallyTranslated} string(s) (${meta.cached ?: 0} from cache)")
+                        } else {
+                            logger.lifecycle("Translatr: All ${meta.cached ?: 0} string(s) retrieved from cache (no AI translation needed)")
+                        }
+                    }
+                    
+                    // Merge new and cached translations
+                    allTranslations = cachedResponse.translations + newTranslations
+                }
                 
             } catch (e: Exception) {
                 if (e is TranslatrApiException) {

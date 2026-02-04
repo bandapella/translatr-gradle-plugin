@@ -305,9 +305,8 @@ class TranslatrClient(
             
             when (status.status) {
                 "completed", "partial" -> {
-                    if (status.translations == null) {
-                        throw IOException("Job completed but translations are missing")
-                    }
+                    // For partial jobs, translations might be empty (but not null with updated API)
+                    // Return the status so the caller can handle the warning and fallback to cache
                     return status
                 }
                 "failed" -> {
