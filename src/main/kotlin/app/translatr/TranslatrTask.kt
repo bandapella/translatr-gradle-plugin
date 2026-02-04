@@ -329,6 +329,11 @@ abstract class TranslatrTask : DefaultTask() {
                     logger.lifecycle("Translatr: Used $tokensUsed tokens, $tokensRemaining tokens remaining")
                 }
                 
+                // Display warning for partial completion
+                response.warning?.let { warning ->
+                    logger.warn("⚠️  Translatr: $warning")
+                }
+                
                 // Merge new and cached translations
                 allTranslations = cachedResponse.translations + newTranslations
                 
