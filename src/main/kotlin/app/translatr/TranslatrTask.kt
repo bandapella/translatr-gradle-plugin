@@ -106,6 +106,25 @@ abstract class TranslatrTask : DefaultTask() {
     private fun writeCache(cacheFile: File, cache: TranslatrCache) {
         cacheFile.writeText(createCacheAdapter().toJson(cache))
     }
+
+    private fun markCacheFailed(
+        cacheFile: File,
+        sourceHash: String,
+        stringHashes: Map<String, String>,
+        languages: Set<String> = emptySet()
+    ) {
+        writeCache(
+            cacheFile,
+            TranslatrCache(
+                sourceHash = sourceHash,
+                timestamp = System.currentTimeMillis(),
+                languages = languages,
+                stringHashes = stringHashes,
+                failed = true
+            )
+        )
+        logger.lifecycle("Translatr: Cache marked as failed - task will retry on next run")
+    }
     
     private fun computeStringHash(value: String): String {
         val digest = MessageDigest.getInstance("SHA-256")
@@ -320,7 +339,13 @@ abstract class TranslatrTask : DefaultTask() {
                             .toSet()
                     } else {
                         logger.warn("No translations returned")
-                        logger.warn("Please configure target languages in the UI at ${serverUrlValue.replace("/api", "")}")
+                        finalWarning?.let { warning ->
+                            logger.warn("⚠️  Translatr: $warning")
+                        }
+                        if (failOnError.get()) {
+                            throw GradleException("Translation failed: no translations were returned from the server")
+                        }
+                        markCacheFailed(cacheFile, currentHash, currentStringHashes, cache?.languages ?: emptySet())
                         return
                     }
                 } else {
@@ -333,6 +358,10 @@ abstract class TranslatrTask : DefaultTask() {
                     if (languages.isEmpty()) {
                         logger.error("Translation failed: No translations were returned from the server")
                         logger.error("This may indicate an issue with your account or the translation service")
+                        if (failOnError.get()) {
+                            throw GradleException("Translation failed: no target languages returned from the server")
+                        }
+                        markCacheFailed(cacheFile, currentHash, currentStringHashes, cache?.languages ?: emptySet())
                         return
                     }
                     
@@ -381,14 +410,14 @@ abstract class TranslatrTask : DefaultTask() {
                         logger.warn("Translatr: No cached translations available")
                         logger.warn("Translatr: Continuing build despite translation failure (failOnError=false)")
                         // Write failed cache to prevent Gradle UP-TO-DATE on next run
-                        writeCache(cacheFile, TranslatrCache(currentHash, System.currentTimeMillis(), emptySet(), currentStringHashes, failed = true))
+                        markCacheFailed(cacheFile, currentHash, currentStringHashes)
                         return
                     }
                 } catch (cacheError: Exception) {
                     logger.error("Translatr: Failed to fetch cached translations: ${cacheError.message}")
                     logger.warn("Translatr: Continuing build despite translation failure (failOnError=false)")
                     // Write failed cache to prevent Gradle UP-TO-DATE on next run
-                    writeCache(cacheFile, TranslatrCache(currentHash, System.currentTimeMillis(), emptySet(), currentStringHashes, failed = true))
+                    markCacheFailed(cacheFile, currentHash, currentStringHashes)
                     return
                 }
             }
@@ -402,6 +431,10 @@ abstract class TranslatrTask : DefaultTask() {
                 
                 if (allTranslations.isEmpty()) {
                     logger.warn("No translations in cache")
+                    if (failOnError.get()) {
+                        throw GradleException("Translation failed: no translations in cache")
+                    }
+                    markCacheFailed(cacheFile, currentHash, currentStringHashes, cache?.languages ?: emptySet())
                     return
                 }
                 
@@ -414,6 +447,7 @@ abstract class TranslatrTask : DefaultTask() {
                 if (failOnError.get()) {
                     throw e
                 }
+                markCacheFailed(cacheFile, currentHash, currentStringHashes, cache?.languages ?: emptySet())
                 return
             }
         }
